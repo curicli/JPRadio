@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Xcode 用户态（每台机器不同，不该进仓库）
+xcuserdata/
+*.xcuserstate
+build/
+DerivedData/
+
+# 手工打包产物：zsh tools/make_unsigned_ipa.sh 随时可重新生成，964K 不值得进仓库。
+# 要分发的话挂到 GitHub Release 的附件里，别提交进历史。
+*.ipa
+
+# Claude Code 的本地设置
+.claude/settings.local.json
+.claude/.cc-writes/
+
+# 排错时抓下来的临时输出 / 中间数据
+# 1.txt          —— ListenRadio 番組表接口的一次性抓包日志
+# Untitled.rtf   —— rajiko full key 的原始导出；真值已注入 RadikoProfile.swift，不必留副本
+1.txt
+Untitled.rtf
