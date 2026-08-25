@@ -51,6 +51,34 @@ final class RadioPlayer: ObservableObject {
     /// 中断（来电等）开始前是否正在播，用于中断结束后决定要不要接着播。
     private var resumeAfterInterruption = false
 
+    // MARK: 播放看门狗
+    //
+    // 直播流会「静静地死掉」：网络切换（WiFi↔蜂窝）、CDN 抖动，或者 radiko 那个
+    // 只在建 `AVURLAsset` 时写进 HTTP 头、之后无法更新的 token 失效，都会让
+    // chunklist 续不上而没有新分片。**这些情况 `AVPlayerItem.status` 不会变成
+    // `.failed`**，它一直是 `.readyToPlay`，`rate` 也可能仍是 1 —— 既不报错也没有
+    // 任何回调，所以界面会一直显示「正在播放」却没有声音。唯一可靠的判据是自己盯着
+    // 播放头有没有前进。下面这套东西与死因无关：卡住就重新鉴权、重建流。
+
+    /// 每 2 秒查一次播放头的巡检任务；只在 `state == .playing` 期间运行。
+    private var watchdog: Task<Void, Never>?
+    /// 上一次观察到的播放头位置与观察时刻。
+    private var lastProgressTime: CMTime = .invalid
+    private var lastProgressAt = Date()
+    /// 当前 item 的通知观察者（stalled / 播放意外结束）。
+    private var itemObservers: [NSObjectProtocol] = []
+    /// 连续重连次数与最近一次重连时刻（用于退避与「稳住了就清零」）。
+    private var reconnectAttempts = 0
+    private var lastReconnectAt = Date.distantPast
+
+    /// 播放头卡住多久算流死了。radiko 分片 5 秒一片，正常抖动远小于 12 秒；
+    /// 定得太短会把普通缓冲误判成掉线，白白打断一次声音。
+    private static let stallGrace: TimeInterval = 12
+    /// 连续重连上限。超了就报错收手，免得对着一个真的没了的流无限重试。
+    private static let maxReconnects = 6
+    /// 稳定播够这么久就把重连计数清零，下次抖动还能再自救一轮。
+    private static let recoveryConfirmed: TimeInterval = 30
+
     /// 伪装成移动 Safari 的 UA，用于直连社区FM（ListenRadio）流的防盗链校验。
     /// （录制引擎 `LiveRecorder` 也复用它——故标 `nonisolated`，可脱离主 actor 访问。）
     nonisolated static let browserUserAgent =
@@ -78,6 +106,7 @@ final class RadioPlayer: ObservableObject {
         currentStation = station
         state = .loading
         retriedOnce = false
+        reconnectAttempts = 0   // 用户主动换台/起播：重连预算重新给满
         updateNowPlaying()
         loadArtwork(for: station)
         startPlayback(station, forceRefresh: false)
@@ -110,6 +139,7 @@ final class RadioPlayer: ObservableObject {
     func pause() {
         player.pause()
         state = .paused
+        stopWatchdog()          // 自己按的暂停，别让看门狗当成掉线去重连
         updateNowPlaying()
     }
 
@@ -117,15 +147,21 @@ final class RadioPlayer: ObservableObject {
         guard currentStation != nil else { return }
         player.play()
         state = .playing
+        startWatchdog()
         updateNowPlaying()
     }
 
     // MARK: - 播放流程
 
-    private func startPlayback(_ station: Station, forceRefresh: Bool) {
+    /// `after`：起播前的等待，只有重连退避会用到（见 `reconnect`）；0 表示立刻。
+    private func startPlayback(_ station: Station, forceRefresh: Bool, after delay: TimeInterval = 0) {
         playTask?.cancel()
         playTask = Task { [weak self] in
             guard let self else { return }
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+                if Task.isCancelled { return }
+            }
 
             // 直连流（ListenRadio 等非 radiko 台）：无需鉴权与区域伪造，直接播。
             // 但要带上「像浏览器」的 UA 与 Referer/Origin —— 部分社区FM CDN
@@ -159,7 +195,13 @@ final class RadioPlayer: ObservableObject {
                 self.attach(item: item, station: station)
             } catch {
                 if !Task.isCancelled {
-                    self.state = .failed(error.localizedDescription)
+                    // 正在自动重连时鉴权/取流失败（多半是网络刚切、还没通）：别直接判死，
+                    // 交回 `reconnect()` 按退避再试，次数上限也归它管。
+                    if self.reconnectAttempts > 0 {
+                        self.reconnect()
+                    } else {
+                        self.state = .failed(error.localizedDescription)
+                    }
                 }
             }
         }
@@ -173,7 +215,28 @@ final class RadioPlayer: ObservableObject {
                 self?.handleStatusChange(status, station: station)
             }
         }
+        observeItem(item)
         player.replaceCurrentItem(with: item)
+    }
+
+    /// 盯住这一条 item 的两类通知。`stalled` 只是普通缓冲，不能一有就重连
+    /// （1 秒的卡顿也会发，重建流反而更吵）—— 交给看门狗的宽限期去判。
+    /// 而「播完了」对直播流来说就是流没了，可以立刻重连。
+    private func observeItem(_ item: AVPlayerItem) {
+        let center = NotificationCenter.default
+        for token in itemObservers { center.removeObserver(token) }
+        itemObservers.removeAll()
+
+        itemObservers.append(
+            center.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification,
+                               object: item, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.reconnect() }
+            })
+        itemObservers.append(
+            center.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+                               object: item, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.reconnect() }
+            })
     }
 
     private func handleStatusChange(_ status: AVPlayerItem.Status, station: Station) {
@@ -182,6 +245,7 @@ final class RadioPlayer: ObservableObject {
         case .readyToPlay:
             player.play()
             state = .playing
+            startWatchdog()
             updateNowPlaying()
         case .failed:
             handlePlaybackFailure(station: station)
@@ -191,6 +255,12 @@ final class RadioPlayer: ObservableObject {
     }
 
     private func handlePlaybackFailure(station: Station) {
+        // 已经在自动重连的循环里：交给 `reconnect()` 统一管退避与次数上限。
+        // 否则 `retriedOnce` 只允许一次，第二次抖动就被打成 .failed，重连预算白给。
+        if reconnectAttempts > 0 {
+            reconnect()
+            return
+        }
         // token 可能过期 —— 强制刷新后重试一次。
         if !retriedOnce {
             retriedOnce = true
@@ -199,6 +269,75 @@ final class RadioPlayer: ObservableObject {
             state = .failed(T.playFailed)
             updateNowPlaying()
         }
+    }
+
+    // MARK: - 看门狗与自动重连
+
+    /// 开始盯播放头。每次进入 `.playing` 都调（换台、恢复、重连成功）。
+    private func startWatchdog() {
+        stopWatchdog()
+        lastProgressTime = .invalid
+        lastProgressAt = Date()
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                if Task.isCancelled { return }
+                guard let self else { return }
+                self.checkProgress()
+            }
+        }
+    }
+
+    private func stopWatchdog() {
+        watchdog?.cancel()
+        watchdog = nil
+    }
+
+    /// 播放头有没有往前走。没走够 `stallGrace` 就重连。
+    private func checkProgress() {
+        guard state == .playing else { return }
+
+        let current = player.currentItem?.currentTime()
+        // `isNumeric` 排掉 invalid/indefinite；第一次采样时 lastProgressTime 是 invalid，
+        // 那次也算「有进展」，只是把基准记下来。
+        if let current, current.isNumeric,
+           !lastProgressTime.isNumeric || current.seconds - lastProgressTime.seconds > 0.25 {
+            lastProgressTime = current
+            lastProgressAt = Date()
+            // 重连之后稳定播够一段时间，就把预算还回去。
+            if reconnectAttempts > 0,
+               Date().timeIntervalSince(lastReconnectAt) > Self.recoveryConfirmed {
+                reconnectAttempts = 0
+            }
+            return
+        }
+
+        // 卡住了。先试最便宜的一招：被系统按停、或路由切换后 rate 归零，推一把就回来了。
+        if player.timeControlStatus == .paused { player.play() }
+
+        if Date().timeIntervalSince(lastProgressAt) >= Self.stallGrace { reconnect() }
+    }
+
+    /// 重新鉴权并重建这条流。**强制刷新 token** —— token 失效是几种死因里唯一
+    /// 光靠重放同一个 `AVURLAsset` 解决不了的，而重新鉴权对其他死因也无害。
+    private func reconnect() {
+        guard let station = currentStation, state == .playing || state == .loading else { return }
+        stopWatchdog()
+
+        guard reconnectAttempts < Self.maxReconnects else {
+            state = .failed(T.playFailed)
+            updateNowPlaying()
+            return
+        }
+        reconnectAttempts += 1
+        lastReconnectAt = Date()
+        // 界面上别再显示「正在播放」——现在确实没声音。`.loading` 显示的是「接続中…」。
+        state = .loading
+        updateNowPlaying()
+
+        // 第一次立刻重连（多半一次就好了），之后 1/3/7 秒退避，免得对着抽风的 CDN 猛打。
+        let backoff = min(pow(2.0, Double(reconnectAttempts - 1)), 8.0) - 1
+        startPlayback(station, forceRefresh: true, after: max(backoff, 0))
     }
 
     // MARK: - 音频会话
