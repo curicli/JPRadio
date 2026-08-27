@@ -103,8 +103,10 @@
          文字只在激活时出现 —— 睡眠倒计时 / 录制走秒。 -->
     <div id="tools">
       <label class="slot" id="sleep-slot">
-        <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M20.3 14.6A8.6 8.6 0 019.4 3.7 7.8 7.8 0 1020.3 14.6z"/>
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M17.4 15.2A7 7 0 018 5.6a6 6 0 109.4 9.6z"/>
+          <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                stroke-linejoin="round" d="M15 3.4h3.6l-3.6 3.4h3.6"/>
         </svg>
         <span class="cap" id="sleep-cap"></span>
         <select id="sleep" aria-label="Sleep timer"></select>
@@ -169,6 +171,21 @@
     <div id="list" role="listbox" aria-label="stations"></div>
     <p id="hint"></p>
   </aside>
+
+  <!-- 番組表面板：只在宽电脑屏（≥1200px）常驻显示，把右边的空白填成有用的当日节目表。
+       更窄的宽屏（平板横屏）放不下第三栏，仍走顶栏日历钮弹出的抽屉（#sheet）。 -->
+  <aside id="guide">
+    <div class="guide-head">
+      <strong id="guide-title">番組表</strong>
+      <div class="guide-days">
+        <button id="gday-prev" class="pill" aria-label="prev day">‹</button>
+        <span id="gday-label">—</span>
+        <button id="gday-next" class="pill" aria-label="next day">›</button>
+      </div>
+    </div>
+    <div id="guide-body"></div>
+  </aside>
+
 </main>
 </div>
 

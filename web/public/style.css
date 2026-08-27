@@ -185,7 +185,7 @@ main { padding: 0 16px; }
   scroll-snap-align: center;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
   cursor: pointer;
   /* 非当前台：缩小、变暗（对应 iOS 的 scaleEffect(0.9) + opacity(0.55)） */
   transform: scale(0.92);
@@ -198,9 +198,9 @@ main { padding: 0 16px; }
 .card .badge {
   position: relative;
   aspect-ratio: 1.5;
-  border-radius: 26px;
+  border-radius: 30px;
   background: #fff;
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
 .card .badge img {
@@ -288,7 +288,7 @@ main { padding: 0 16px; }
 .card .unit { font-size: 17px; font-weight: 500; color: var(--dim); }
 .card .name {
   margin-top: 6px;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -339,8 +339,8 @@ main { padding: 0 16px; }
 #controls .iconbtn .ic { width: 22px; height: 22px; }
 
 button.play {
-  width: 72px;
-  height: 72px;
+  width: 74px;
+  height: 74px;
   border-radius: 50%;
   border: none;
   background: #fff;
@@ -349,7 +349,7 @@ button.play {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
   transition: transform 0.1s ease;
 }
 button.play:active { transform: scale(0.95); }
@@ -440,13 +440,38 @@ button.play.playing .pause-ic { display: block; }
   color: var(--dim);
 }
 #vol-wrap .ic { width: 18px; height: 18px; flex: none; }
-/* 滑块用中性白：品牌橙留给「正在生效」的那些东西（指针、录制、自动识曲），
-   一条满格的橙色长条会把注意力全抢走。 */
+/* 滑块：左侧填色（已生效的音量），右侧留白（无色轨道）—— 用 --vol 百分比分段。
+   品牌橙留给「正在生效」的那些东西（指针、录制、自动识曲），这里的填色用中性白就够。 */
 #vol {
   flex: 1;
-  accent-color: rgba(255, 255, 255, 0.8);
   min-width: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right,
+    rgba(255, 255, 255, 0.85) 0 var(--vol, 100%),
+    rgba(255, 255, 255, 0.16) var(--vol, 100%) 100%);
+  cursor: pointer;
 }
+#vol::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+#vol::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+}
+#vol::-moz-range-track { background: transparent; }
 
 /* MARK: - 存档 / 录音回放时才出现的那一小块 */
 
@@ -514,6 +539,24 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
 /* MARK: - 侧栏（宽屏才有）：当前拨盘的电台列表 */
 
 #side { display: none; }
+
+/* 番組表常驻面板：默认藏起来，只有最宽的电脑屏（见文末 @media ≥1200）才铺成第三栏。 */
+#guide { display: none; }
+.guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px 10px;
+}
+.guide-head strong { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guide-days { display: flex; align-items: center; gap: 6px; flex: none; }
+.guide-days span { min-width: 6.5em; text-align: center; font-size: 12px; color: var(--dim); }
+#guide-body {
+  position: relative;   /* 让下面 renderPrograms 用 offsetTop 只滚自己、不滚整页 */
+  overflow-y: auto;
+  padding-right: 4px;
+}
 
 #list-head {
   font-size: 12px;
@@ -751,6 +794,16 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
 /* 已经收藏 / 已经预约：用品牌色描出来，跟 ★ 电台收藏同一套视觉语言。 */
 .prog button.on { color: var(--brand); border-color: var(--brand); }
 .prog button.pfav { font-size: 14px; padding: 3px 9px; }
+/* 图标操作按钮（预约 / 下载 / タイムフリー）：正方形、只放图标，不占标题的宽度。 */
+.prog button.picon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+.prog button.picon svg { width: 19px; height: 19px; display: block; }
 
 #sheet-note, #lib-note {
   font-size: 11.5px;
@@ -776,6 +829,10 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
   #app {
     max-width: 1180px;
     padding-bottom: 24px;
+    /* 宽屏锁死整窗高度：三栏各自在栏内滚动，侧栏 / 番組表才能撑到与播放器同高。 */
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
   }
   header { padding-top: 18px; }
   h1 { font-size: 18px; }
@@ -783,10 +840,18 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
 
   main {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    /* 电台列表靠左（当作左边的导航栏），播放器占右边一大栏。 */
+    grid-template-columns: 340px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 28px;
-    align-items: start;
+    flex: 1;
+    min-height: 0;
   }
+  /* 视觉顺序显式排：列表在左、播放器在右 —— DOM 里播放器仍排第一（手机端它才是主角）。
+     必须连 grid-row 一起钉死：播放器在 DOM 里靠前又占第 2 列，稀疏排布回填不了第 1 列，
+     只写 grid-column 会把列表挤到第二行去。 */
+  #side { grid-column: 1; grid-row: 1; }
+  .stage { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; }
 
   /* 卡片两侧留出半张卡的空白，第一/最后一张也能滑到正中间 */
   #cards { padding-inline: calc((100% - var(--cardw)) / 2); }
@@ -808,8 +873,12 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
     border: 1px solid var(--line);
     border-radius: var(--round);
     padding: 14px;
+    /* 拉到与播放器同高（本来靠内容撑高，列表一少就缩成半截、下面一大片空 —— 就是「左侧栏短了」）。
+       撑满后让列表自己在栏内滚动。 */
+    align-self: stretch;
+    min-height: 0;
   }
-  #list { max-height: min(56vh, 520px); }
+  #list { flex: 1; min-height: 0; }
   #hint { margin: 14px 2px 0; }
 
   #sheet, #lib { align-items: center; }
@@ -846,10 +915,13 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
 
   main {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 290px;
+    /* 同宽屏：列表靠左。这条媒体查询在 <980 宽也会命中，拿不到上面 ≥980 的排位，得自己显式排。 */
+    grid-template-columns: 290px minmax(0, 1fr);
     gap: 18px;
     align-items: start;
   }
+  #side { grid-column: 1; grid-row: 1; }
+  .stage { grid-column: 2; grid-row: 1; }
   #app { max-width: 1180px; }
   header { padding-top: 8px; padding-bottom: 0; }
   #dials { padding: 6px 16px 8px; }
@@ -889,7 +961,37 @@ button.pill:hover { border-color: var(--brand); color: var(--brand); }
   .sheet-box { border-radius: var(--round); max-width: 680px; max-height: 92vh; }
 }
 
-/* 很窄的手机：大号频率再收一点，别把 "FM 80.0 MHz" 挤成两行。 */
+/* 宽电脑屏（≥1200px）：右边再铺一栏常驻番組表，把原来空着的黑边填成有用的当日节目表。
+   —— 播放器 | 电台列表 | 番組表 三栏。更窄的宽屏（平板横屏）放不下第三栏，仍走顶栏日历钮。 */
+@media (min-width: 1200px) {
+  #app { max-width: 1360px; }
+
+  /* 列表(左) | 播放器(中) | 番組表(右) */
+  main { grid-template-columns: 300px minmax(0, 1fr) 380px; }
+  #side { grid-column: 1; grid-row: 1; }
+  .stage { grid-column: 2; grid-row: 1; }
+  #guide { grid-column: 3; grid-row: 1; }
+
+  /* 番組表常驻了，顶栏那颗日历钮就多余了（点开的抽屉和右栏内容一样）。 */
+  #schedule { display: none; }
+
+  /* 三栏等高：播放器、列表、番組表都撑满整窗，各自在栏内滚动。 */
+  .stage { align-self: stretch; }
+
+  #guide {
+    display: flex;
+    flex-direction: column;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: var(--round);
+    padding: 14px;
+    align-self: stretch;
+    min-height: 0;
+  }
+  #guide-body { flex: 1; min-height: 0; }
+}
+
+/* 极窄手机（≤340px）：大号频率会顶破卡片，压小一档。 */
 @media (max-width: 340px) {
   .card .freq { font-size: 38px; }
   .card .unit { font-size: 14px; }

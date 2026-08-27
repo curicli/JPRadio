@@ -47,6 +47,9 @@ const state = {
   /// 也不能重连（放完就是放完了），所以看门狗与 hls.js 两条路都要绕开。
   file: null,
   day: 0,
+  // 宽电脑屏常驻的番組表面板（#guide）自己的日期游标，与抽屉的 state.day 分开：
+  // 抽屉是临时看、常驻面板是长期挂着，共用一个游标会互相把日期顶掉。
+  guideDay: 0,
   hls: null,
   dial: null,
 }
@@ -281,6 +284,9 @@ function selectStation(id, { scroll } = {}) {
   if (wasPlaying) play()
   else setStatus(T('statusIdle'))
   loadNowPlaying(id)
+  // 换台时常驻番組表面板回到当天并重拉（保留上次翻到的日期没意义，是另一台的）。
+  state.guideDay = 0
+  loadGuide()
   // 识曲：上一首的结果作废，自动识曲对着新台重新开始（recognize.js）。
   window.recognizeHooks?.stationChanged?.()
   // 录制按钮是「当前台在不在录」，换台就得重画（library.js）。
@@ -752,7 +758,7 @@ async function loadSheet() {
   }
 }
 
-function renderPrograms(body, list, station) {
+function renderPrograms(body, list, station, scrollMode = 'page') {
   if (!list.length) {
     body.append(el('p', null, T('noProgram')))
     return
@@ -771,8 +777,12 @@ function renderPrograms(body, list, station) {
     row.append(box)
     const acts = el('div', 'pacts')
     // タイムフリー 只有 radiko 有，而且只覆盖已经播完的节目（一周内）。
+    // 用图标而不是文字：一排文字按钮会把节目标题挤成窄列（见 library.js PICON 注释）。
     if (!station.direct && p.end && p.end <= now && now - p.end < 7 * 86400_000) {
-      const b = el('button', null, T('timefree'))
+      const b = el('button', 'picon')
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 11a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5V8h3.5"/><path d="M12 9v3.2l2.3 1.4"/></svg>'
+      b.title = T('timefree')
+      b.setAttribute('aria-label', T('timefree'))
       b.onclick = () => playArchive(station, p)
       acts.append(b)
     }
@@ -782,7 +792,45 @@ function renderPrograms(body, list, station) {
     body.append(row)
   }
   const current = body.querySelector('.prog.onair')
-  current?.scrollIntoView({ block: 'center' })
+  if (!current) return
+  // 常驻面板（#guide）里用 scrollIntoView 会顺带把整页也滚一下（把面板里的
+  // 正在播出那行拉到「视口」中央）—— 首屏就跳一下很难看。改成只滚容器自己。
+  if (scrollMode === 'container') {
+    body.scrollTop = Math.max(0, current.offsetTop - body.clientHeight / 2 + current.clientHeight / 2)
+  } else {
+    current.scrollIntoView({ block: 'center' })
+  }
+}
+
+// MARK: - 番組表常驻面板（#guide，只在宽电脑屏出现）
+
+/// CSS 在窄屏把 #guide 设成 display:none —— 不可见时不必去抓表（换台会白抓一次）。
+function guideVisible() {
+  const g = $('guide')
+  return g && getComputedStyle(g).display !== 'none'
+}
+
+async function loadGuide() {
+  if (!guideVisible()) return
+  const s = currentStation()
+  const body = $('guide-body')
+  if (!s) { body.textContent = ''; $('guide-title').textContent = T('program'); return }
+  $('guide-title').textContent = `${s.name} · ${T('program')}`
+  $('gday-label').textContent = '—'
+  body.textContent = ''
+  body.append(el('p', null, T('loading')))
+  try {
+    const doc = await fetchProgramDoc(s.id, state.guideDay)
+    $('gday-label').textContent = dayLabel(state.guideDay, doc.dayStart)
+    body.textContent = ''
+    renderPrograms(body, doc.programs ?? [], s, 'container')
+  } catch (e) {
+    body.textContent = ''
+    body.append(el('p', 'err', `${T('loadFailed')}\n${e.message}`))
+    const retry = el('button', 'pill', T('retry'))
+    retry.onclick = loadGuide
+    body.append(retry)
+  }
 }
 
 // MARK: - タイムフリー（存档回放）
@@ -841,6 +889,7 @@ function applyLanguage() {
   renderStationList()
   if (!state.playing) setStatus(T('statusIdle'))
   if (!$('sheet').hidden) loadSheet()
+  loadGuide()
 }
 
 // MARK: - 启动
@@ -854,15 +903,22 @@ function wire() {
   $('live-back').onclick = backToLive
   $('day-prev').onclick = () => { if (state.day > -7) { state.day--; loadSheet() } }
   $('day-next').onclick = () => { if (state.day < 7) { state.day++; loadSheet() } }
+  $('gday-prev').onclick = () => { if (state.guideDay > -7) { state.guideDay--; loadGuide() } }
+  $('gday-next').onclick = () => { if (state.guideDay < 7) { state.guideDay++; loadGuide() } }
   $('sheet').onclick = (e) => { if (e.target === $('sheet')) closeSheet() }
   $('lang').onchange = (e) => { L.lang = e.target.value; applyLanguage() }
 
   const vol = $('vol')
   vol.value = localStorage.getItem(KEY.vol) ?? '1'
   audio.volume = Number(vol.value)
+  // 把当前音量写成百分比给 CSS：轨道用它画「左侧填色、右侧留白」的分段渐变
+  // （原生 accent-color 各浏览器对右侧轨道着色不一致，右边总糊一层浅色）。
+  const paintVol = () => vol.style.setProperty('--vol', `${Number(vol.value) * 100}%`)
+  paintVol()
   vol.oninput = () => {
     audio.volume = Number(vol.value)
     localStorage.setItem(KEY.vol, vol.value)
+    paintVol()
   }
 
   document.addEventListener('keydown', (e) => {
@@ -902,6 +958,7 @@ async function main() {
   paintGlow()
   setStatus(T('statusIdle'))
   if (state.stationID) loadNowPlaying(state.stationID)
+  loadGuide()
   // 番組表每分钟只影响卡片那一行「正在播出」，一分钟刷一次够了。
   setInterval(() => { if (state.stationID) loadNowPlaying(state.stationID) }, 60_000)
 }

@@ -17,6 +17,14 @@ const LKEY = { favProgram: 'favoritePrograms' }
 /// 打的是本机、回来是一小段 JSON，一秒一次的代价可以忽略，换来的是按钮上的秒表在走。
 const LIB_POLL_MS = 1000
 
+/// 番組表行右侧的操作按钮统一用图标（不用文字）：文字标签（如「Schedule recording」）
+/// 会把节目标题挤成窄窄一列、层层折行还跟「ON AIR」角标叠在一起。图标 + aria-label
+/// 既紧凑又不丢可读性。原版 / art 版共用这套 JS，改这里两版一起生效。
+const PICON = {
+  reserve: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 10.5V13l1.9 1.1"/><path d="M5 4.6 7.4 6.9M19 4.6 16.6 6.9"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v9m0 0-3.5-3.5M12 13l3.5-3.5M5 18.5h14"/></svg>',
+}
+
 /// 已经不会再变的预约状态（角标计数不算它们）。与 lib/reservations.mjs 的 DONE 一致。
 const RES_DONE = new Set(['completed', 'failed', 'missed'])
 
@@ -453,12 +461,14 @@ function programRow(acts, station, p, now) {
   const ended = p.end && p.end <= now
   if (!ended) {
     const id = resKey(station, p)
-    const b = el('button', null)
+    const b = el('button', 'picon')
+    b.innerHTML = PICON.reserve
     const paint = () => {
       const on = hasReserve(id)
-      b.textContent = on ? T('reserved') : T('reserve')
       b.classList.toggle('on', on)
-      b.title = T(on ? 'cancelReserve' : 'reserve')
+      const label = T(on ? 'cancelReserve' : 'reserve')
+      b.title = label
+      b.setAttribute('aria-label', label)
     }
     b.onclick = async () => {
       b.disabled = true
@@ -473,7 +483,10 @@ function programRow(acts, station, p, now) {
   }
   // 播完的：只有 radiko 有存档，而且只留一周（更早的就真没有了）。
   if (!station.direct && now - p.end < 7 * 86400_000) {
-    const b = el('button', null, T('downloadArchive'))
+    const b = el('button', 'picon')
+    b.innerHTML = PICON.download
+    b.title = T('downloadArchive')
+    b.setAttribute('aria-label', T('downloadArchive'))
     b.onclick = async () => { b.disabled = true; await downloadArchive(station, p); b.disabled = false }
     acts.append(b)
   }
