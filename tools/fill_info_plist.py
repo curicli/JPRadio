@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 JPRadio/Info.plist 里的 $(构建变量) 换成真值，并补齐装机必需的键。
+"""把 ios/JPRadio/Info.plist 里的 $(构建变量) 换成真值，并补齐装机必需的键。
 
 Xcode 打包时这一步由 ProcessInfoPlistFile 干；这里手工拼包（见 make_unsigned_ipa.sh），
 所以自己来。变量的真值从 project.pbxproj 里那套 build settings 抄下来。

@@ -1,0 +1,896 @@
+/* JPRadio web。视觉照 iOS 版来（JPRadio/Views/*.swift）：
+   全黑底 + 台标主色光晕，白色台标徽章 + 大号频率读数，玻璃胶囊与玻璃工具条，
+   强调色一律是品牌橙红 #FF662E（与 iOS 端 `Color.brand` 同值）。
+
+   两套布局：
+   - 竖屏手机：单列，卡片一屏一台（对应 iOS 的 StationPagerView）。
+   - 电脑 / 平板横屏（≥980px 或矮横屏）：左边播放器、右边电台列表。
+     鼠标用户不该被逼着横向滑卡片，所以宽屏专门给一条竖着的台列表。 */
+
+:root {
+  --brand: #ff662e;
+  --bg: #07070a;
+  --glass: rgba(255, 255, 255, 0.07);
+  --glass-2: rgba(255, 255, 255, 0.12);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #f4f4f6;
+  --dim: rgba(244, 244, 246, 0.6);
+  --dim-2: rgba(244, 244, 246, 0.42);
+  --sheet: #15151a;
+  /* 卡片宽度：手机一屏一张；宽屏窄一点，好露出左右两张的边（跟 iOS 分页一样） */
+  --cardw: 100%;
+  --round: 20px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP",
+        "PingFang SC", Segoe UI, system-ui, sans-serif;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS 端那些大号数字用的是 SF Rounded。网页上按同样的意图挑一串圆体，取不到就退回系统字。 */
+.rounded {
+  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
+               "Noto Sans JP", system-ui, sans-serif;
+}
+
+/* 背景：台标主色的大光晕 + 自上而下压黑（iOS 端 TunerView.background 是同样两层）。
+   颜色由 JS 写进 --glow，取不到就退回品牌色的一点点暖光。 */
+#glow {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(125% 68% at 50% -6%, var(--glow, rgba(255, 102, 46, 0.18)) 0%, transparent 68%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.55) 46%, #000 100%);
+  transition: background 0.6s ease;
+  pointer-events: none;
+}
+
+#app {
+  max-width: 620px;
+  margin: 0 auto;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+/* MARK: - 顶栏（语言 · 标题/状态 · 番組表） */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: max(10px, env(safe-area-inset-top)) 16px 4px;
+}
+
+.titlebox {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+h1 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+#status {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+  min-height: 1.3em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#status.live { color: #4ade80; }
+
+select, button, input { font: inherit; color: inherit; }
+
+/* 圆形玻璃钮（iOS 端顶栏那三颗 36pt 圆钮） */
+.iconbtn {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.iconbtn:hover { background: rgba(255, 255, 255, 0.16); }
+.iconbtn:active { transform: scale(0.94); }
+.iconbtn.small { width: 30px; height: 30px; font-size: 13px; color: var(--dim); }
+.iconbtn .ic { width: 19px; height: 19px; }
+
+/* 语言：原生 <select> 铺满圆钮但透明，下拉仍是系统的（外观统一、行为不改） */
+#lang-btn select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* MARK: - 拨盘条（iOS 端 regionBar：横向滚动的胶囊） */
+
+#dials {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 16px 14px;
+  scrollbar-width: none;
+}
+#dials::-webkit-scrollbar { display: none; }
+
+#dials button {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.25;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.15s ease;
+}
+#dials button:hover { background: rgba(255, 255, 255, 0.13); }
+#dials button .dn { font-size: 13px; font-weight: 600; }
+#dials button .ds { font-size: 9px; font-weight: 500; opacity: 0.7; }
+/* 选中的拨盘：iOS 端是更亮的一层白 + 一圈描边（不是品牌色填充） */
+#dials button[aria-current="true"] {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+/* ★ 收藏那条：iOS 端用黄色文字 */
+#dials button.favdial { color: #ffd83d; }
+
+main { padding: 0 16px; }
+
+/* MARK: - 电台卡片（iOS 端 StationCardView：白色台标徽章 + 大号频率） */
+
+#cards {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  padding: 2px 0 10px;
+}
+#cards::-webkit-scrollbar { display: none; }
+
+.card {
+  flex: 0 0 var(--cardw);
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  cursor: pointer;
+  /* 非当前台：缩小、变暗（对应 iOS 的 scaleEffect(0.9) + opacity(0.55)） */
+  transform: scale(0.92);
+  opacity: 0.5;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+.card.on { transform: none; opacity: 1; }
+
+/* 白色台标徽章。台标多是白底 PNG，所以整块就做成一张白牌子 —— 跟实体面板上的贴纸一样。 */
+.card .badge {
+  position: relative;
+  aspect-ratio: 1.5;
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.card .badge img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 13%;
+}
+/* 台标缺图（radiko 有几个 logo 是 404）时垫一个占位符，别露出一张空白牌子 */
+.card .badge .nologo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 22px/1 ui-rounded, system-ui, sans-serif;
+  color: rgba(0, 0, 0, 0.22);
+}
+
+/* LIVE 徽标（左上）与收藏星（右上）—— 与 iOS 端同一处位置 */
+.card .live {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  display: none;
+  align-items: center;
+  gap: 5px;
+  font: 800 11px/1 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  color: #e0244b;
+  background: rgba(224, 36, 75, 0.12);
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+.card .live::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #e0244b;
+}
+.card.on.playing .live { display: inline-flex; }
+
+.card .cfav {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.3);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+}
+.card.on .cfav { display: block; }
+.card .cfav:hover { background: rgba(0, 0, 0, 0.1); }
+.card .cfav[aria-pressed="true"] { color: #f5b301; }
+
+/* 徽章下面那一组文字。非当前卡片整组隐掉（与 iOS 一致）：滑动时只有中间那张有字。 */
+.card .info {
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.card.on .info { opacity: 1; }
+
+.card .freqline {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 7px;
+}
+.card .freq {
+  font-size: clamp(42px, 15vw, 62px);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.card .unit { font-size: 17px; font-weight: 500; color: var(--dim); }
+.card .name {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card .tag {
+  font-size: 13px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card .now {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--dim-2);
+  min-height: 1.3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* MARK: - 刻度尺（dial.js 画，与 iOS 端 FrequencyDialView 同一套画法） */
+
+#dial {
+  width: 100%;
+  height: 96px;
+  display: block;
+  touch-action: none; /* 不然横向拖动会被浏览器抢去做页面滚动 */
+  cursor: grab;
+  /* 两端柔和淡出（iOS 端是同样的 fadeMask） */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+#dial:active { cursor: grabbing; }
+
+/* MARK: - 播放控制（iOS 端 controls：两侧小钮 + 中间大白圆） */
+
+#controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 34px;
+  margin: 14px 0 16px;
+}
+#controls .iconbtn { width: 46px; height: 46px; background: none; color: var(--text); }
+#controls .iconbtn:hover { background: rgba(255, 255, 255, 0.1); }
+#controls .iconbtn .ic { width: 22px; height: 22px; }
+
+button.play {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  color: #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s ease;
+}
+button.play:active { transform: scale(0.95); }
+button.play .ic { width: 30px; height: 30px; }
+button.play .pause-ic { display: none; }
+button.play.playing .play-ic { display: none; }
+button.play.playing .pause-ic { display: block; }
+
+/* MARK: - 工具条（iOS 端 utilityBar：一条玻璃条，5 个等宽槽位） */
+
+#tools {
+  display: flex;
+  padding: 4px;
+  border-radius: 30px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+}
+
+.slot {
+  position: relative;
+  flex: 1;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  border-radius: 24px;
+  color: rgba(244, 244, 246, 0.82);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.slot:hover { background: rgba(255, 255, 255, 0.07); }
+.slot .ic { width: 21px; height: 21px; }
+.slot .cap {
+  font: 600 9px/1 ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.slot .cap:empty { display: none; }
+.slot.on { color: var(--brand); }
+/* 睡眠定时器的 <select> 铺满槽位（透明），点哪儿都能出下拉 */
+.slot select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* 录制中：整槽变红并轻轻呼吸 —— 录制跑在服务端、关了页面也在录，这个状态必须一眼看得出来。 */
+#rec .ic-stop { display: none; }
+#rec.on { color: #ff5a5a; }
+#rec.on .ic-rec { display: none; }
+#rec.on .ic-stop { display: block; }
+#rec.on { animation: recpulse 2.2s ease-in-out infinite; }
+@keyframes recpulse {
+  50% { opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #rec.on { animation: none; }
+}
+
+/* 录音库槽位右上角的角标：待录的预约数（iOS 端也是这么标的） */
+.slot .dot {
+  position: absolute;
+  top: 7px;
+  right: 22%;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font: 700 10px/16px system-ui, sans-serif;
+  text-align: center;
+}
+
+/* MARK: - 音量 */
+
+#vol-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 4px 0;
+  color: var(--dim);
+}
+#vol-wrap .ic { width: 18px; height: 18px; flex: none; }
+/* 滑块用中性白：品牌橙留给「正在生效」的那些东西（指针、录制、自动识曲），
+   一条满格的橙色长条会把注意力全抢走。 */
+#vol {
+  flex: 1;
+  accent-color: rgba(255, 255, 255, 0.8);
+  min-width: 0;
+}
+
+/* MARK: - 存档 / 录音回放时才出现的那一小块 */
+
+#player-extra { margin-top: 12px; text-align: center; }
+#audio { width: 100%; }
+#audio:not([controls]) { display: none; }
+
+button.pill {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+button.pill:hover { border-color: var(--brand); color: var(--brand); }
+#live-back { margin-top: 10px; }
+
+/* MARK: - 识曲结果（iOS 端 SongBanner） */
+
+#song {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 12px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+}
+#song[hidden] { display: none; }
+#song-art {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex: none;
+}
+#song .song-body { flex: 1; min-width: 0; }
+/* 曲名可能很长（日文长标题很常见），一行截断比撑破卡片好。 */
+#song-title {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#song-artist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#song-link { font-size: 12px; color: var(--brand); }
+/* `.plain` 是「只有一句状态文案」的形态：没有封面、标题按说明文字显示，
+   所以不要让它看起来像一首歌。 */
+#song.plain { background: rgba(255, 255, 255, 0.05); }
+#song.plain #song-title {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: normal;
+  font-size: 12.5px;
+}
+
+/* MARK: - 侧栏（宽屏才有）：当前拨盘的电台列表 */
+
+#side { display: none; }
+
+#list-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  padding: 0 4px 8px;
+}
+
+#list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+.srow:hover { background: rgba(255, 255, 255, 0.06); }
+.srow.on { background: rgba(255, 255, 255, 0.11); border-color: rgba(255, 255, 255, 0.16); }
+.srow img {
+  width: 44px;
+  height: 26px;
+  flex: none;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 5px;
+  padding: 2px;
+}
+/* 台标 404 时的占位（见 app.js 的 renderStationList）：占同样的位置，行不会错开 */
+.srow .slogo-blank {
+  width: 44px;
+  height: 26px;
+  flex: none;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.srow .sbody { flex: 1; min-width: 0; }
+.srow .sname {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.srow .stag {
+  font-size: 11px;
+  color: var(--dim-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.srow .sfreq {
+  flex: none;
+  font: 600 12px ui-monospace, monospace;
+  color: var(--dim);
+}
+.srow.on .sfreq { color: var(--brand); }
+
+#hint {
+  color: var(--dim-2);
+  font-size: 11.5px;
+  margin: 16px 4px 0;
+}
+
+/* MARK: - 抽屉：番組表（#sheet）与录音库（#lib）共用同一套壳子 */
+
+#sheet, #lib {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 10;
+}
+#sheet[hidden], #lib[hidden] { display: none; }
+
+.sheet-box {
+  background: var(--sheet);
+  border: 1px solid var(--line);
+  border-radius: var(--round) var(--round) 0 0;
+  width: 100%;
+  max-width: 620px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px max(14px, env(safe-area-inset-bottom));
+}
+
+.sheet-head, .sheet-days {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sheet-head strong { font-size: 15px; }
+.sheet-days { margin: 10px 0; justify-content: center; }
+.sheet-days span { min-width: 12em; text-align: center; font-size: 13px; color: var(--dim); }
+
+#sheet-body, #lib-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 录音库的三栏（录音 / 预约 / 节目收藏） */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text);
+}
+.tabs button[aria-current="true"] {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.5);
+  font-weight: 600;
+}
+
+/* 录音 / 预约 / 收藏的每一行：左边文字，右边一排小按钮 */
+.lrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.lrow:last-child { border-bottom: none; }
+.lrow .lbody { flex: 1; min-width: 0; }
+.lrow .ltitle {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lrow .lsub { font-size: 12px; color: var(--dim); }
+.lrow .err { margin-top: 2px; font-size: 12px; }
+/* 正在录 / 正在下：左边描一条品牌色，跟已经录好的那些区分开 */
+.lrow.busy { border-left: 2px solid var(--brand); padding-left: 8px; }
+
+.lrow button, .lrow a.lbtn {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  color: inherit;
+  flex: none;
+}
+.lrow button:hover, .lrow a.lbtn:hover { border-color: var(--brand); color: var(--brand); }
+.lrow button:disabled { opacity: 0.45; cursor: default; }
+.lrow button.on { color: var(--brand); border-color: var(--brand); }
+
+/* MARK: - 番組表的每一行 */
+
+.prog {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.prog:last-child { border-bottom: none; }
+.prog .time {
+  font: 600 12px ui-monospace, monospace;
+  color: var(--dim);
+  min-width: 5.4em;
+  padding-top: 2px;
+}
+.prog.onair .time { color: var(--brand); }
+.prog .body { flex: 1; min-width: 0; }
+.prog .ptitle { font-size: 14px; font-weight: 600; }
+.prog .pfm { font-size: 12px; color: var(--dim); }
+.prog .badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+/* 每一行右侧那一排按钮：★收藏 / 预约 / 存档回放 / 下载存档（见 app.js、library.js）。
+   竖着排，因为节目标题已经占掉大半宽度，横着排在手机上会把行挤成三行。 */
+.prog .pacts {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+}
+.prog button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 5px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: center;
+  white-space: nowrap;
+  color: inherit;
+}
+.prog button:hover { border-color: var(--brand); color: var(--brand); }
+.prog button:disabled { opacity: 0.45; cursor: default; }
+/* 已经收藏 / 已经预约：用品牌色描出来，跟 ★ 电台收藏同一套视觉语言。 */
+.prog button.on { color: var(--brand); border-color: var(--brand); }
+.prog button.pfav { font-size: 14px; padding: 3px 9px; }
+
+#sheet-note, #lib-note {
+  font-size: 11.5px;
+  color: var(--dim-2);
+  margin: 10px 0 0;
+  text-align: center;
+  /* 录音目录是一条长路径，手机上要能换行 */
+  overflow-wrap: anywhere;
+}
+
+.err { color: #ff8a6a; font-size: 13px; white-space: pre-wrap; }
+
+/* MARK: - 宽屏：电脑与平板横屏
+   左边播放器、右边台列表；抽屉从「底部弹出」改成「居中对话框」。 */
+
+@media (min-width: 980px) {
+  /* 用 vw 而不是 % ：这个值同时喂给卡片的 flex-basis 和 #cards 的左右内边距，
+     而百分比在这两处的参照物不一样（内边距按容器宽算，flex-basis 按容器**内容框**算，
+     也就是已经减掉了内边距的那个宽度）—— 混用的结果是卡片比留白算出来的窄一截，永远居不了中。
+     末尾那项 vh 是给「宽但不高」的屏幕兜底：徽章是 3:2 的，卡片一宽整页就顶出屏幕。 */
+  :root { --cardw: min(360px, 55vw, 46vh); }
+
+  #app {
+    max-width: 1180px;
+    padding-bottom: 24px;
+  }
+  header { padding-top: 18px; }
+  h1 { font-size: 18px; }
+  #status { font-size: 13px; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 28px;
+    align-items: start;
+  }
+
+  /* 卡片两侧留出半张卡的空白，第一/最后一张也能滑到正中间 */
+  #cards { padding-inline: calc((100% - var(--cardw)) / 2); }
+
+  #dial { height: 112px; }
+
+  /* 刻度尺占满整栏（能多看到几 MHz），但下面这些控件不跟着拉宽 ——
+     一条 620px 的工具条会把 5 个图标撒得老远，怎么看都不像一台收音机的面板。 */
+  #song, #controls, #tools, #vol-wrap, #player-extra {
+    max-width: 460px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  #side {
+    display: flex;
+    flex-direction: column;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: var(--round);
+    padding: 14px;
+  }
+  #list { max-height: min(56vh, 520px); }
+  #hint { margin: 14px 2px 0; }
+
+  #sheet, #lib { align-items: center; }
+  .sheet-box {
+    border-radius: var(--round);
+    max-width: 680px;
+    max-height: 82vh;
+    padding: 16px 20px;
+  }
+  /* 番組表每行右边那几个钮改横排：宽屏有地方，竖排会把每行撑到三行高，一屏只剩四五档节目。 */
+  .prog .pacts { flex-direction: row; align-items: center; }
+}
+
+/* 宽但不高（笔记本、没最大化的窗口）：整台收音机要尽量一屏放下，不用滚。
+   砍的都是宽屏下本来就重复的东西 —— 台的一句话简介右边列表里已经有了。 */
+@media (min-width: 980px) and (max-height: 820px) {
+  :root { --cardw: min(360px, 55vw, 38vh); }
+
+  header { padding-top: 10px; }
+  #dials { padding-bottom: 10px; }
+  .card { gap: 12px; }
+  .card .freq { font-size: 46px; }
+  .card .unit { font-size: 15px; }
+  .card .name { margin-top: 4px; font-size: 18px; }
+  .card .tag { display: none; }
+  #dial { height: 96px; }
+  #controls { margin: 10px 0 12px; }
+}
+
+/* 矮横屏（手机横过来、小平板）：只有三四百像素的高度，竖着摞不下一张卡 ——
+   把卡片改成「徽章在左、频率在右」的一横条，剩下的高度才够放刻度尺和播放键。 */
+@media (orientation: landscape) and (max-height: 560px) and (min-width: 700px) {
+  :root { --cardw: min(430px, 56vw); }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 290px;
+    gap: 18px;
+    align-items: start;
+  }
+  #app { max-width: 1180px; }
+  header { padding-top: 8px; padding-bottom: 0; }
+  #dials { padding: 6px 16px 8px; }
+  #cards { padding-inline: calc((100% - var(--cardw)) / 2); }
+
+  /* 一横条：徽章占左边 44%（3:2 的比例决定它多高），文字靠左排在右边 */
+  .card { flex-direction: row; align-items: center; gap: 14px; }
+  .card .badge { flex: 0 0 44%; border-radius: 20px; }
+  .card .info { flex: 1; min-width: 0; text-align: left; }
+  .card .freqline { justify-content: flex-start; }
+  .card .freq { font-size: 42px; }
+  .card .unit { font-size: 14px; }
+  .card .name { margin-top: 2px; font-size: 16px; }
+  .card .tag { display: none; }
+  .card .cfav { width: 30px; height: 30px; right: 8px; top: 8px; font-size: 15px; }
+
+  /* 刻度尺不再压矮：dial.js 那套版式（刻度 + 圆点 + 读数胶囊）低于 96px 会开始互相压。 */
+  #controls { margin: 8px 0 10px; gap: 28px; }
+  button.play { width: 56px; height: 56px; }
+  button.play .ic { width: 24px; height: 24px; }
+  #song, #controls, #tools, #vol-wrap, #player-extra {
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #side {
+    display: flex;
+    flex-direction: column;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: var(--round);
+    padding: 12px;
+  }
+  #list { max-height: 46vh; }
+  #hint { display: none; }
+  #sheet, #lib { align-items: center; }
+  .sheet-box { border-radius: var(--round); max-width: 680px; max-height: 92vh; }
+}
+
+/* 很窄的手机：大号频率再收一点，别把 "FM 80.0 MHz" 挤成两行。 */
+@media (max-width: 340px) {
+  .card .freq { font-size: 38px; }
+  .card .unit { font-size: 14px; }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "jpradio-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JPRadio web 版：本机 Node 反代 + 静态前端（radiko / ListenRadio）",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node test/check.mjs"
+  }
+}

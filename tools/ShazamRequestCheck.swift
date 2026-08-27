@@ -1,9 +1,9 @@
-// Shazam 查曲库接口的请求/响应形状自测（在 Mac 上跑；在 JPRadio/ 之外，不进 iOS target）。
+// Shazam 查曲库接口的请求/响应形状自测（在 Mac 上跑；在 ios/JPRadio/ 之外，不进 iOS target）。
 //
 //   SWIFTC=/Applications/xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc
 //   SDK=/Applications/xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 //   "$SWIFTC" -sdk "$SDK" -o /tmp/shzcheck \
-//       JPRadio/Models/Station.swift JPRadio/Player/ShazamWebMatcher.swift \
+//       ios/JPRadio/Models/Station.swift ios/JPRadio/Player/ShazamWebMatcher.swift \
 //       Tools/ShazamRequestCheck.swift
 //   /tmp/shzcheck
 //

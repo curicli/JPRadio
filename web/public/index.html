@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>JPRadio</title>
+<!-- 内嵌图标：省掉一个必然 404 的 /favicon.ico 请求（浏览器控制台里那条红色很扎眼）。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151517'/%3E%3Cpath d='M6 21h20' stroke='%23ff662e' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M11 12v6M16 8v10M21 14v4' stroke='%23ff662e' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<!-- Safari 原生就能放 HLS；其它浏览器靠 hls.js。取不到 CDN 时 app.js 会退回原生尝试，
+     所以这里不用 `defer` 之外的任何保证顺序的手段，也不因为它加载失败而卡住页面。 -->
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
+<script src="i18n.js" defer></script>
+<script src="dial.js" defer></script>
+<script src="app.js" defer></script>
+<!-- 识曲。必须排在 app.js 之后：它要用 app.js 里的 state / currentStation，
+     并把自己挂到 window.recognizeHooks 上给 app.js 回调。 -->
+<script src="recognize.js" defer></script>
+<!-- 录音库 / 预约 / 节目收藏。同上，排在 app.js 之后，挂 window.libraryHooks。 -->
+<script src="library.js" defer></script>
+</head>
+<body>
+<!-- 台标主色渲染出的背景（与 iOS 端 ColorExtractor + TunerView.background 同一个思路：
+     一层台标主色的大光晕，再压一层自上而下变黑的渐变）。 -->
+<div id="glow"></div>
+
+<div id="app">
+<header>
+  <!-- 语言。iOS 端是顶栏左边那颗 🌐 圆钮；这里把原生 <select> 铺在圆钮上（透明），
+       外观统一而下拉仍然是系统的。 -->
+  <label class="iconbtn" id="lang-btn">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+         stroke-linecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/>
+    </svg>
+    <select id="lang" aria-label="Language">
+      <option value="en">English</option>
+      <option value="zh">中文</option>
+      <option value="ja">日本語</option>
+    </select>
+  </label>
+
+  <!-- 标题 + 状态（对应 iOS 端 header 里那两行） -->
+  <div class="titlebox">
+    <h1 id="app-title">JPRadio</h1>
+    <p id="status">—</p>
+  </div>
+
+  <button class="iconbtn" id="schedule" aria-label="Program guide">
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+         stroke-linecap="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="3.5"/><path d="M8 3v4M16 3v4M3 10h18"/>
+    </svg>
+  </button>
+</header>
+
+<!-- 拨盘选择：★收藏 + 全部 + 14 条真实拨盘（对应 iOS 端 regionBar） -->
+<nav id="dials" aria-label="dials"></nav>
+
+<main>
+  <section class="stage">
+    <!-- 卡片轮播：一屏一台，滑动选台，与刻度尺互相同步（对应 StationPagerView） -->
+    <div id="cards" tabindex="0"></div>
+
+    <canvas id="dial" aria-label="frequency dial"></canvas>
+
+    <!-- 识曲结果 / 状态（对应 iOS 端的 SongBanner）。`.plain` 表示现在显示的是
+         一句状态文案（识别中 / 没匹配到 / 失败原因），不是一首歌。 -->
+    <div id="song" class="plain" hidden>
+      <img id="song-art" alt="" hidden>
+      <div class="song-body">
+        <div id="song-title"></div>
+        <div id="song-artist"></div>
+        <a id="song-link" target="_blank" rel="noreferrer noopener" hidden></a>
+      </div>
+      <button id="song-close" class="iconbtn small" aria-label="Close">✕</button>
+    </div>
+
+    <!-- 播放控制：上一台 / 大白圆播放键 / 下一台（对应 iOS 端 controls） -->
+    <div id="controls">
+      <button id="prev" class="iconbtn" aria-label="prev">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M11 6v12L3 12zM21 6v12l-8-6z"/>
+        </svg>
+      </button>
+      <button id="play" class="play" aria-label="Play">
+        <svg class="ic play-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg class="ic pause-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z"/>
+        </svg>
+      </button>
+      <button id="next" class="iconbtn" aria-label="next">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M13 6v12l8-6zM3 6v12l8-6z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 工具条（对应 iOS 端 utilityBar 那条玻璃条）：5 个等宽槽位，
+         文字只在激活时出现 —— 睡眠倒计时 / 录制走秒。 -->
+    <div id="tools">
+      <label class="slot" id="sleep-slot">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M20.3 14.6A8.6 8.6 0 019.4 3.7 7.8 7.8 0 1020.3 14.6z"/>
+        </svg>
+        <span class="cap" id="sleep-cap"></span>
+        <select id="sleep" aria-label="Sleep timer"></select>
+      </label>
+
+      <!-- 录制：录在服务端，关页面也继续（见 library.js） -->
+      <button class="slot recbtn" id="rec" aria-label="Record" aria-pressed="false">
+        <svg class="ic ic-rec" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.6" fill="currentColor" stroke="none"/>
+        </svg>
+        <svg class="ic ic-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="6.5" y="6.5" width="11" height="11" rx="2.6"/>
+        </svg>
+        <span class="cap" id="rec-cap"></span>
+      </button>
+
+      <!-- 录音库 / 预约 / 节目收藏。角标是待录的预约数（对应 iOS 端 libraryButton）。 -->
+      <button class="slot" id="lib-open" aria-label="Recordings">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true">
+          <path d="M4 10v4M8 6.5v11M12 9v6M16 4.5v15M20 10v4"/>
+        </svg>
+        <span class="dot" id="lib-badge" hidden></span>
+      </button>
+
+      <!-- 识曲：立刻识一次 -->
+      <button class="slot" id="identify" aria-label="Identify song">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M10.4 17.6a2.6 2.6 0 11-1.9-2.5V5.8l8.6-1.8v3.3l-6.7 1.4z"/>
+        </svg>
+      </button>
+
+      <!-- 自动识曲开关（默认开，每轮多下约 16 秒音频） -->
+      <button class="slot" id="auto-identify" aria-label="Auto-identify" aria-pressed="true">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" aria-hidden="true">
+          <path d="M6.5 9.2a5.5 5.5 0 010 5.6M11 6.4a10.5 10.5 0 010 11.2M15.5 3.6a15.5 15.5 0 010 16.8"/>
+        </svg>
+      </button>
+    </div>
+
+    <label id="vol-wrap">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M4 9.5h3.2L11 6v12L7.2 14.5H4z"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+              d="M14.6 9.4a3.6 3.6 0 010 5.2M17.4 6.8a7.4 7.4 0 010 10.4"/>
+      </svg>
+      <input id="vol" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+    </label>
+
+    <!-- 放存档（タイムフリー）或放录音时才出现：可以拖进度条，也可以一键回直播 -->
+    <div id="player-extra">
+      <audio id="audio" playsinline></audio>
+      <button id="live-back" class="pill" hidden>ライブ</button>
+    </div>
+  </section>
+
+  <!-- 侧栏：只在宽屏（电脑 / 平板横屏）出现。鼠标用户不该被逼着横向滑卡片。 -->
+  <aside id="side">
+    <div id="list-head"></div>
+    <div id="list" role="listbox" aria-label="stations"></div>
+    <p id="hint"></p>
+  </aside>
+</main>
+</div>
+
+<!-- 番組表抽屉 -->
+<div id="sheet" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-head">
+      <strong id="sheet-title">番組表</strong>
+      <button id="sheet-close" class="iconbtn small" aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-days">
+      <button id="day-prev" class="pill">‹</button>
+      <span id="day-label">—</span>
+      <button id="day-next" class="pill">›</button>
+    </div>
+    <div id="sheet-body"></div>
+    <p id="sheet-note"></p>
+  </div>
+</div>
+
+<!-- 录音库抽屉：录音 / 预约 / 节目收藏三栏 -->
+<div id="lib" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="lib-title">
+    <div class="sheet-head">
+      <strong id="lib-title">録音</strong>
+      <button id="lib-close" class="iconbtn small" aria-label="Close">✕</button>
+    </div>
+    <div id="lib-tabs" class="tabs"></div>
+    <div id="lib-body"></div>
+    <p id="lib-note"></p>
+  </div>
+</div>
+</body>
+</html>

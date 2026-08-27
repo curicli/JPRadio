@@ -1,11 +1,11 @@
-// 收藏节目的离线自测（在 Mac 上跑；在 JPRadio/ 之外，不进 iOS target）。
+// 收藏节目的离线自测（在 Mac 上跑；在 ios/JPRadio/ 之外，不进 iOS target）。
 //
 //   SWIFTC=/Applications/xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc
 //   SDK=/Applications/xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 //   "$SWIFTC" -sdk "$SDK" -o /tmp/favcheck \
-//       JPRadio/Models/Station.swift JPRadio/Radiko/RadikoStream.swift \
-//       JPRadio/Radiko/RadikoAuth.swift JPRadio/Radiko/RadikoProfile.swift \
-//       JPRadio/Recording/FavoriteProgramStore.swift Tools/FavoriteProgramCheck.swift
+//       ios/JPRadio/Models/Station.swift ios/JPRadio/Radiko/RadikoStream.swift \
+//       ios/JPRadio/Radiko/RadikoAuth.swift ios/JPRadio/Radiko/RadikoProfile.swift \
+//       ios/JPRadio/Recording/FavoriteProgramStore.swift Tools/FavoriteProgramCheck.swift
 //   /tmp/favcheck
 //
 // 盯的是「收藏跨天仍认得出同一档节目」这件事：番組表里每次播出都是一条新记录

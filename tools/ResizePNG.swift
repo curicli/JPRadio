@@ -1,4 +1,4 @@
-// PNG 缩放小工具（在 Mac 上跑；放在 JPRadio/ 之外，不会被编译进 iOS target）。
+// PNG 缩放小工具（在 Mac 上跑；放在 ios/JPRadio/ 之外，不会被编译进 iOS target）。
 //
 //   SDK=/Applications/xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 //   swiftc -sdk "$SDK" -O -o /tmp/resizepng tools/ResizePNG.swift

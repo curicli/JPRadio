@@ -8,7 +8,7 @@
 # 代价（与 Xcode Archive 出来的包相比）：
 #   - **没有 Assets.car**（actool 跑不起来）→ asset catalog 里的颜色/图片在运行时取不到。
 #     强调色因此**不再走 `Color.accentColor`**，改成代码常量 `Color.brand`（见
-#     JPRadio/Models/Theme.swift），这样手工包和 Xcode 包配色一致；台标之类的运行时
+#     ios/JPRadio/Models/Theme.swift），这样手工包和 Xcode 包配色一致；台标之类的运行时
 #     下载图片本来就不受影响。app 图标改用旧式 `CFBundleIconFiles`（现切 120/180/1024
 #     三张 PNG）—— 这条路 iOS 至今仍认，图标能正常显示。
 #   - 未签名：装机需自行用 Sideloadly / AltStore / 自签工具签一次。
@@ -30,14 +30,14 @@ rm -rf "$STAGE"
 mkdir -p "$APP"
 
 # 1. 编译 + 链接（-parse-as-library：入口是 @main struct，不是 main.swift 的顶层代码）
-FILES=(JPRadio/**/*.swift)
+FILES=(ios/JPRadio/**/*.swift)
 echo "compiling ${#FILES[@]} files…"
 "$SWIFTC" -sdk "$SDK" -target arm64-apple-ios17.0 -O -wmo -parse-as-library \
   -module-cache-path "${TMPDIR:-/tmp}/mcache" -disable-sandbox \
   -o "$APP/JPRadio" "${FILES[@]}"
 
 # 2. app 图标：从 1024 母图切出旧式图标（actool 用不了，见文件头；sips 也不行，见 ResizePNG.swift）
-ICON=JPRadio/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+ICON=ios/JPRadio/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 MACSDK=$DEV/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 RESIZE=${TMPDIR:-/tmp}/resizepng
 "$SWIFTC" -sdk "$MACSDK" -O -module-cache-path "${TMPDIR:-/tmp}/mcache" -disable-sandbox \
@@ -48,7 +48,7 @@ done
 cp "$ICON" "$APP/AppIcon1024.png"
 
 # 3. Info.plist：把 $(...) 构建变量替换成真值，并补上装机必需的键
-python3 tools/fill_info_plist.py JPRadio/Info.plist "$APP/Info.plist"
+python3 tools/fill_info_plist.py ios/JPRadio/Info.plist "$APP/Info.plist"
 
 # 4. 打包（ipa 就是个 zip，根目录一个 Payload/）
 ( cd "$STAGE" && zip -qry "$ROOT/JPRadio-unsigned.ipa" Payload )

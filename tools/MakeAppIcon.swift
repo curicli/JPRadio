@@ -1,8 +1,8 @@
-// App 图标生成器（在 Mac 上跑；放在 JPRadio/ 之外，故不会被编译进 iOS target）。
+// App 图标生成器（在 Mac 上跑；放在 ios/JPRadio/ 之外，故不会被编译进 iOS target）。
 //
 //   SDK=/Applications/xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 //   swiftc -sdk "$SDK" -O -o /tmp/makeicon Tools/MakeAppIcon.swift
-//   /tmp/makeicon JPRadio/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+//   /tmp/makeicon ios/JPRadio/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 //
 // 设计：**モダン・バウハウス**（现代包豪斯）。
 // 几何原形 + 三原色 + 完全平涂，没有渐变、没有高光、没有阴影 —— 包豪斯的规矩。

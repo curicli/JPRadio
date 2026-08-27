@@ -1,11 +1,11 @@
-// ListenRadio 番組表解析的离线自测（在 Mac 上跑；在 JPRadio/ 之外，不进 iOS target）。
+// ListenRadio 番組表解析的离线自测（在 Mac 上跑；在 ios/JPRadio/ 之外，不进 iOS target）。
 //
 //   SWIFTC=/Applications/xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc
 //   SDK=/Applications/xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 //   "$SWIFTC" -sdk "$SDK" -O -o /tmp/schedcheck \
-//       JPRadio/Models/Station.swift JPRadio/Radiko/RadikoStream.swift \
-//       JPRadio/Radiko/RadikoAuth.swift JPRadio/Radiko/RadikoProfile.swift \
-//       JPRadio/ListenRadio/ScheduleJSON.swift JPRadio/ListenRadio/ListenRadioProgramService.swift \
+//       ios/JPRadio/Models/Station.swift ios/JPRadio/Radiko/RadikoStream.swift \
+//       ios/JPRadio/Radiko/RadikoAuth.swift ios/JPRadio/Radiko/RadikoProfile.swift \
+//       ios/JPRadio/ListenRadio/ScheduleJSON.swift ios/JPRadio/ListenRadio/ListenRadioProgramService.swift \
 //       Tools/ScheduleParseCheck.swift
 //   /tmp/schedcheck
 //

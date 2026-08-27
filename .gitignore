@@ -11,9 +11,13 @@ DerivedData/
 # 要分发的话挂到 GitHub Release 的附件里，别提交进历史。
 *.ipa
 
+# web 版的录音落盘目录（`--rec-dir` 默认值）：用户的私人录音 + 预约状态，运行时生成，不进仓库。
+web/recordings/
+
 # Claude Code 的本地设置
 .claude/settings.local.json
 .claude/.cc-writes/
+.claude/launch.json
 
 # 排错时抓下来的临时输出 / 中间数据
 # 1.txt          —— ListenRadio 番組表接口的一次性抓包日志

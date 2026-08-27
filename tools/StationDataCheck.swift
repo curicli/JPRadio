@@ -1,8 +1,8 @@
-// 电台数据表的离线自测（在 Mac 上跑；在 JPRadio/ 之外，不进 iOS target）。
+// 电台数据表的离线自测（在 Mac 上跑；在 ios/JPRadio/ 之外，不进 iOS target）。
 //
 //   SWIFTC=/Applications/xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc
 //   SDK=/Applications/xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
-//   "$SWIFTC" -sdk "$SDK" -o /tmp/stcheck JPRadio/Models/Station.swift Tools/StationDataCheck.swift
+//   "$SWIFTC" -sdk "$SDK" -o /tmp/stcheck ios/JPRadio/Models/Station.swift Tools/StationDataCheck.swift
 //   /tmp/stcheck
 //
 // 盯的是「拨盘上的频率必须是真实广播频率」这件事：曾经直连台用的是均匀假档位，
