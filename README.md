@@ -59,8 +59,10 @@ live streams and on recording playback; on a match the title / artist / art over
 ## Web version
 
 Listen from any browser on your machine — same stations, same design, plus recording and
-scheduled recording (the always-on Node process makes both possible). See
-[web/README.md](web/README.md) for the full write-up.
+scheduled recording (the always-on Node process makes both possible). On a phone it's a single
+radio; the wider the window, the more it fans out — a station list column at ≥980px, plus an
+always-on program guide column at ≥1200px (three equal-height columns, each scrolling on its
+own). See [web/README.md](web/README.md) for the full write-up.
 
 ```bash
 node web/server.mjs                        # → http://127.0.0.1:8787
